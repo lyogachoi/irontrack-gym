@@ -1,5 +1,6 @@
 const CACHE = "irontrack-v2";
-const CORE = ["/", "/manifest.webmanifest", "/icon.svg", "/icon-192.svg", "/icon-512.svg"];
+const ROOT = self.registration.scope;
+const CORE = ["", "manifest.webmanifest", "icon.svg", "icon-192.svg", "icon-512.svg"].map(path => new URL(path, ROOT).toString());
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
@@ -18,6 +19,6 @@ self.addEventListener("fetch", event => {
         caches.open(CACHE).then(cache => cache.put(event.request, copy));
         return response;
       })
-      .catch(() => caches.match(event.request).then(cached => cached || caches.match("/")))
+      .catch(() => caches.match(event.request).then(cached => cached || caches.match(ROOT)))
   );
 });

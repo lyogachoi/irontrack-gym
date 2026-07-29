@@ -28,6 +28,9 @@ pnpm build:worker
 Проект использует Next.js и OpenNext для Cloudflare Workers. Постоянное
 хранилище реализовано через Durable Object.
 
-## Развёрнутая версия
+## Публичная версия
 
-[Открыть IronTrack](https://iron-track-gym.lyogachoi.chatgpt.site)
+[Открыть IronTrack](https://lyogachoi.github.io/irontrack-gym/)
+
+Версия на GitHub Pages работает без входа и пароля. Данные сохраняются локально
+в браузере; для переноса или восстановления используйте резервную копию.

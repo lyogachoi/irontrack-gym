@@ -1,18 +1,20 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 export const metadata: Metadata = {
   title: "IronTrack — дневник тренировок",
   description: "Планируйте тренировки, записывайте подходы и следите за прогрессом.",
-  manifest: "/manifest.webmanifest",
+  manifest: `${basePath}/manifest.webmanifest`,
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "IronTrack",
   },
   icons: {
-    icon: "/icon.svg",
-    apple: "/icon-192.svg",
+    icon: `${basePath}/icon.svg`,
+    apple: `${basePath}/icon-192.svg`,
   },
 };
 
