@@ -119,6 +119,20 @@ export default function Home() {
         const legacy = value as unknown as { history?: Session[] };
         value = { ...initialState, history: legacy.history || seedHistory };
       }
+      if (value) {
+        const history = (value.history || seedHistory).map((session, index) => {
+          const fallback = new Date();
+          fallback.setDate(fallback.getDate() - index * 3);
+          const iso = session.iso || fallback.toISOString().slice(0, 10);
+          return { ...session, id: session.id || Date.now() + index, iso, date: session.date || formatDate(iso) };
+        });
+        value = {
+          ...value,
+          history,
+          measurements: value.measurements || [],
+          activeTemplateId: value.activeTemplateId || value.templates[0].id,
+        };
+      }
       const next = value || initialState;
       setState(next);
       const template = next.templates.find(t => t.id === next.activeTemplateId) || next.templates[0];
