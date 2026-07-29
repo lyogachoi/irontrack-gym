@@ -9,6 +9,11 @@ type Session = { id: number; iso: string; date: string; title: string; volume: n
 type Template = { id: number; name: string; subtitle: string; exercises: Exercise[] };
 type Measurement = { id: number; iso: string; weight: number; waist: number; chest: number; arm: number; photo?: string };
 type SavedState = { templates: Template[]; activeTemplateId: number; history: Session[]; measurements: Measurement[] };
+type CatalogExercise = {
+  name: string; muscle: string; equipment: string; level: "Начальный" | "Средний";
+  sheet: "chest" | "back" | "legs" | "arms" | "core"; slot: number;
+  steps: [string, string, string]; mistakes: string;
+};
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const cloudSyncEnabled = process.env.NEXT_PUBLIC_CLOUD_SYNC !== "false";
@@ -17,15 +22,47 @@ const formatDate = (iso: string) => new Intl.DateTimeFormat("ru", { day: "numeri
 const setRows = (weights: number[][]) => weights.map((v, i) => ({ id: i + 1, weight: v[0], reps: v[1], done: false }));
 const cloneExercises = (items: Exercise[]) => items.map(e => ({ ...e, sets: e.sets.map(s => ({ ...s, done: false })) }));
 
-const catalog = [
-  ["Жим штанги лёжа", "Грудь"], ["Жим гантелей на наклонной", "Грудь"], ["Сведение в кроссовере", "Грудь"],
-  ["Тяга верхнего блока", "Спина"], ["Тяга штанги в наклоне", "Спина"], ["Подтягивания", "Спина"],
-  ["Приседания со штангой", "Ноги"], ["Жим ногами", "Ноги"], ["Сгибание ног", "Ноги"], ["Разгибание ног", "Ноги"],
-  ["Жим гантелей сидя", "Плечи"], ["Махи гантелей в стороны", "Плечи"], ["Обратная бабочка", "Плечи"],
-  ["Сгибание рук со штангой", "Бицепс"], ["Молотковые сгибания", "Бицепс"],
-  ["Разгибание рук на блоке", "Трицепс"], ["Французский жим", "Трицепс"],
-  ["Становая тяга", "Всё тело"], ["Планка", "Кор"], ["Скручивания", "Кор"],
-] as const;
+const exercise = (
+  name: string, muscle: string, equipment: string, sheet: CatalogExercise["sheet"], slot: number,
+  steps: CatalogExercise["steps"], mistakes: string, level: CatalogExercise["level"] = "Начальный",
+): CatalogExercise => ({ name, muscle, equipment, sheet, slot, steps, mistakes, level });
+
+const catalog: CatalogExercise[] = [
+  exercise("Жим штанги лёжа","Грудь","Штанга · скамья","chest",0,["Сведите лопатки, упритесь стопами и снимите штангу.","Опустите гриф к нижней части груди, локти держите под углом около 45°.","Выжмите вверх без отрыва таза и потери положения лопаток."],"Не отбивайте штангу от груди и не разводите локти в одну линию с плечами.","Средний"),
+  exercise("Жим гантелей на наклонной","Грудь","Гантели · наклонная скамья","chest",1,["Установите наклон 20–35°, прижмите лопатки к скамье.","Опустите гантели по сторонам груди до комфортной глубины.","Выжмите их вверх и слегка внутрь, сохраняя запястья ровными."],"Слишком высокий наклон переносит нагрузку на плечи."),
+  exercise("Сведение рук в кроссовере","Грудь","Кроссовер","chest",2,["Поставьте одну ногу вперёд, корпус слегка наклоните.","С мягкими локтями сведите рукояти перед грудью.","Медленно вернитесь до растяжения грудных мышц."],"Не превращайте движение в жим и не раскачивайте корпус."),
+  exercise("Отжимания от пола","Грудь","Собственный вес","chest",3,["Ладони чуть шире плеч, тело держите прямой линией.","Опустите грудь между ладонями, сохраняя напряжённый корпус.","Оттолкнитесь от пола до выпрямления рук."],"Не проваливайте поясницу и не тяните голову к полу."),
+  exercise("Отжимания на брусьях","Грудь","Брусья","chest",4,["Зафиксируйте плечи вниз и слегка наклоните корпус вперёд.","Согните руки и опуститесь до комфортного растяжения груди.","Выжмите себя вверх, не пожимая плечами."],"Не опускайтесь глубже, чем позволяет подвижность плеч.","Средний"),
+  exercise("Разводка гантелей лёжа","Грудь","Гантели · скамья","chest",5,["Держите гантели над грудью, локти немного согнуты.","Разведите руки по дуге до уровня, где плечам комфортно.","Сведите гантели той же дугой, напрягая грудь."],"Не опускайте локти слишком низко и не выпрямляйте их полностью."),
+
+  exercise("Тяга верхнего блока","Спина","Верхний блок","back",0,["Зафиксируйте бёдра, грудь направьте вверх.","Потяните рукоять к верхней части груди, ведя локти вниз.","Плавно распрямите руки, сохраняя контроль лопаток."],"Не тяните рукоять за голову и не отклоняйтесь резко назад."),
+  exercise("Тяга штанги в наклоне","Спина","Штанга","back",1,["Отведите таз назад и удерживайте нейтральную спину.","Подтяните гриф к низу живота, локти ведите назад.","Опустите штангу подконтрольно, не меняя наклон корпуса."],"Не округляйте поясницу и не дёргайте вес ногами.","Средний"),
+  exercise("Подтягивания","Спина","Турник","back",2,["Повисните, опустите плечи от ушей и напрягите корпус.","Подтяните грудь к перекладине, направляя локти вниз.","Опуститесь до прямых рук без расслабленного падения."],"Не раскачивайтесь и не вытягивайте подбородок вперёд.","Средний"),
+  exercise("Горизонтальная тяга блока","Спина","Нижний блок","back",3,["Сядьте ровно, колени слегка согнуты, спина нейтральна.","Потяните рукоять к животу и сведите лопатки.","Верните руки вперёд без сильного округления корпуса."],"Не запрокидывайте корпус назад ради лишнего веса."),
+  exercise("Тяга гантели одной рукой","Спина","Гантель · скамья","back",4,["Упритесь рукой и коленом, выровняйте таз и плечи.","Тяните гантель к бедру, локоть ведите вдоль корпуса.","Опустите до растяжения широчайшей без поворота корпуса."],"Не поднимайте плечо к уху и не скручивайте туловище."),
+  exercise("Пуловер на верхнем блоке","Спина","Верхний блок","back",5,["Возьмите прямую рукоять и немного наклонитесь вперёд.","На почти прямых руках опустите рукоять к бёдрам.","Медленно вернитесь, сохраняя рёбра собранными."],"Не сгибайте руки как в тяге и не прогибайте поясницу."),
+
+  exercise("Приседания со штангой","Квадрицепс","Штанга · стойка","legs",0,["Поставьте стопы устойчиво, вдохните и напрягите корпус.","Сядьте вниз и назад, колени направляйте по линии носков.","Встаньте, одновременно разгибая колени и таз."],"Не заваливайте колени внутрь и не теряйте нейтральную спину.","Средний"),
+  exercise("Жим ногами","Квадрицепс","Тренажёр","legs",1,["Прижмите таз и спину к сиденью, стопы поставьте устойчиво.","Опустите платформу до глубины без подкручивания таза.","Выжмите платформу, не блокируя колени резко."],"Не отрывайте поясницу и не сводите колени."),
+  exercise("Румынская тяга","Задняя поверхность бедра","Штанга","legs",2,["Слегка согните колени и отведите таз назад.","Ведите гриф близко к ногам до растяжения задней поверхности бедра.","Сожмите ягодицы и вернитесь в стойку."],"Не приседайте вниз и не округляйте спину.","Средний"),
+  exercise("Выпады вперёд","Ягодицы","Собственный вес · гантели","legs",3,["Сделайте достаточно длинный шаг и удерживайте корпус ровно.","Опуститесь, сгибая обе ноги, переднее колено ведите по стопе.","Оттолкнитесь всей передней стопой и вернитесь."],"Не ставьте стопы на одну линию и не падайте на носок."),
+  exercise("Разгибание ног","Квадрицепс","Тренажёр","legs",4,["Совместите колено с осью тренажёра, прижмите спину.","Разогните ноги и на секунду напрягите квадрицепс.","Опустите валик медленно, не бросая вес."],"Не используйте рывок и не отрывайте таз от сиденья."),
+  exercise("Сгибание ног лёжа","Задняя поверхность бедра","Тренажёр","legs",5,["Расположите валик чуть выше пяток, таз прижмите к скамье.","Согните колени, подтягивая пятки к ягодицам.","Медленно распрямите ноги до растяжения."],"Не поднимайте таз и не прогибайтесь в пояснице."),
+
+  exercise("Жим гантелей сидя","Плечи","Гантели · скамья","arms",0,["Прижмите спину, держите гантели чуть выше плеч.","Выжмите вверх по естественной дуге, не сталкивая гантели.","Опустите до комфортного положения локтей."],"Не переразгибайте поясницу и не опускайте локти слишком низко."),
+  exercise("Махи гантелей в стороны","Плечи","Гантели","arms",1,["Встаньте устойчиво, локти слегка согнуты.","Поднимите руки в стороны до уровня плеч, ведя локтями.","Опустите гантели медленно, сохраняя напряжение."],"Не пожимайте плечами и не раскачивайте тяжёлый вес."),
+  exercise("Обратная бабочка","Задняя дельта","Тренажёр","arms",2,["Прижмите грудь к опоре и возьмитесь за рукояти.","Разведите руки, направляя локти назад и в стороны.","Вернитесь до лёгкого растяжения без удара плит."],"Не сводите лопатки чрезмерно и не пожимайте плечами."),
+  exercise("Сгибание рук со штангой","Бицепс","Штанга","arms",3,["Прижмите локти к бокам и выровняйте запястья.","Согните руки, поднимая гриф без движения плеч вперёд.","Опустите до почти прямых рук под контролем."],"Не раскачивайте корпус и не выводите локти вперёд."),
+  exercise("Молотковые сгибания","Бицепс","Гантели","arms",4,["Держите гантели нейтральным хватом, ладони внутрь.","Согните руки, сохраняя локти рядом с корпусом.","Опустите гантели медленно до полного контроля."],"Не помогайте плечами и не бросайте вес вниз."),
+  exercise("Разгибание рук на блоке","Трицепс","Верхний блок","arms",5,["Зафиксируйте локти у корпуса и слегка наклонитесь.","Разогните руки вниз до полного напряжения трицепса.","Верните рукоять, двигая только предплечьями."],"Не разводите локти и не наваливайтесь всем весом."),
+
+  exercise("Планка на предплечьях","Кор","Собственный вес","core",0,["Поставьте локти под плечами и вытяните тело в линию.","Подкрутите таз, напрягите пресс и ягодицы.","Дышите спокойно, удерживая одинаковое положение."],"Не проваливайте поясницу и не поднимайте таз слишком высоко."),
+  exercise("Скручивания на блоке","Кор","Верхний блок","core",1,["Встаньте на колени и удерживайте канат у головы.","Скрутите рёбра к тазу усилием пресса.","Вернитесь до растяжения, не разгибая таз."],"Не тяните канат руками и не превращайте движение в поклон."),
+  exercise("Подъём коленей в висе","Кор","Турник","core",2,["Повисните устойчиво и опустите плечи от ушей.","Подкрутите таз и поднимите колени к груди.","Опустите ноги без раскачивания."],"Не набирайте инерцию и не ограничивайтесь сгибанием бёдер."),
+  exercise("Ягодичный мост со штангой","Ягодицы","Штанга · скамья","core",3,["Упритесь лопатками в скамью, гриф положите на сгиб таза.","Поднимите таз до прямой линии плечи–колени.","Сожмите ягодицы и опуститесь подконтрольно."],"Не переразгибайте поясницу в верхней точке.","Средний"),
+  exercise("Подъём на носки стоя","Икры","Тренажёр","core",4,["Поставьте подушечки стоп на платформу, корпус держите ровно.","Поднимитесь максимально высоко на носки.","Опустите пятки до мягкого растяжения икр."],"Не пружиньте и не заворачивайте стопы внутрь."),
+  exercise("Подъём на носки сидя","Икры","Тренажёр","core",5,["Зафиксируйте колени под подушками, стопы на платформе.","Поднимите пятки, сокращая камбаловидные мышцы.","Опустите пятки медленно до растяжения."],"Не делайте короткие быстрые повторения без полной амплитуды."),
+];
 
 const defaultTemplates: Template[] = [
   { id: 1, name: "Верх тела", subtitle: "Грудь · Спина · Плечи", exercises: [
@@ -69,6 +106,20 @@ const Icon = ({ name }: { name: string }) => {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 };
 
+const ExerciseImage = ({ item, large = false }: { item: CatalogExercise; large?: boolean }) => {
+  const col = item.slot % 3;
+  const row = Math.floor(item.slot / 3);
+  return <div
+    className={`exercise-image ${large ? "large" : ""}`}
+    role="img"
+    aria-label={`Техника: ${item.name}`}
+    style={{
+      backgroundImage: `url("${basePath}/exercises/${item.sheet}.jpg")`,
+      backgroundPosition: `${col * 50}% ${row * 100}%`,
+    }}
+  />;
+};
+
 function openDb() {
   return new Promise<IDBDatabase | null>(resolve => {
     if (!("indexedDB" in window)) return resolve(null);
@@ -89,6 +140,7 @@ export default function Home() {
   const [settings, setSettings] = useState(false);
   const [programsOpen, setProgramsOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [selectedExercise, setSelectedExercise] = useState<CatalogExercise | null>(null);
   const [measurementOpen, setMeasurementOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState("Загружаю данные…");
   const [catalogSearch, setCatalogSearch] = useState("");
@@ -266,8 +318,8 @@ export default function Home() {
     if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const v=JSON.parse(String(reader.result));if(!v.templates||!v.history)throw Error();const template=v.templates.find((t:Template)=>t.id===v.activeTemplateId)||v.templates[0];setState(v);setExercises(cloneExercises(template.exercises));setSettings(false);}catch{alert("Не удалось прочитать копию IronTrack.");}};reader.readAsText(file);
   }
 
-  const muscles=["Все",...Array.from(new Set(catalog.map(x=>x[1])))];
-  const filteredCatalog=catalog.filter(([n,m])=>(muscleFilter==="Все"||m===muscleFilter)&&n.toLowerCase().includes(catalogSearch.toLowerCase()));
+  const muscles=["Все",...Array.from(new Set(catalog.map(x=>x.muscle)))];
+  const filteredCatalog=catalog.filter(x=>(muscleFilter==="Все"||x.muscle===muscleFilter)&&`${x.name} ${x.muscle} ${x.equipment}`.toLowerCase().includes(catalogSearch.toLowerCase()));
   const calendarDays=useMemo(()=>{const now=new Date();const y=now.getFullYear(),m=now.getMonth();const first=(new Date(y,m,1).getDay()+6)%7;const count=new Date(y,m+1,0).getDate();return [...Array(first).fill(null),...Array.from({length:count},(_,i)=>i+1)];},[]);
   const trainedDays=new Set(state.history.filter(h=>h.iso.slice(0,7)===todayIso().slice(0,7)).map(h=>Number(h.iso.slice(8,10))));
 
@@ -288,12 +340,27 @@ export default function Home() {
       <button className="primary light-primary" onClick={createProgram}>+ Создать программу</button>
     </section></div>}
 
-    {catalogOpen&&<div className="modal-backdrop" onClick={()=>setCatalogOpen(false)}><section className="settings-modal tall-modal" role="dialog" aria-modal="true" aria-label="Каталог упражнений" onClick={e=>e.stopPropagation()}>
-      <button className="modal-close" onClick={()=>setCatalogOpen(false)} aria-label="Закрыть">×</button><div className="eyebrow">КАТАЛОГ</div><h2>Добавить упражнение</h2>
-      <input className="search-input" placeholder="Поиск упражнения" value={catalogSearch} onChange={e=>setCatalogSearch(e.target.value)}/>
-      <div className="filter-row">{muscles.map(m=><button className={m===muscleFilter?"active":""} key={m} onClick={()=>setMuscleFilter(m)}>{m}</button>)}</div>
-      <div className="catalog-list">{filteredCatalog.map(([n,m])=><button key={n} onClick={()=>addCatalogExercise(n,m)}><span><strong>{n}</strong><small>{m}</small></span><b>+</b></button>)}</div>
-      <button className="add-set custom-button" onClick={customExercise}>+ Создать своё упражнение</button>
+    {catalogOpen&&<div className="modal-backdrop" onClick={()=>{setCatalogOpen(false);setSelectedExercise(null)}}><section className="settings-modal tall-modal catalog-modal" role="dialog" aria-modal="true" aria-label="Каталог упражнений" onClick={e=>e.stopPropagation()}>
+      <button className="modal-close" onClick={()=>{setCatalogOpen(false);setSelectedExercise(null)}} aria-label="Закрыть">×</button>
+      {selectedExercise?<div className="exercise-detail">
+        <button className="detail-back" onClick={()=>setSelectedExercise(null)}>← Все упражнения</button>
+        <ExerciseImage item={selectedExercise} large/>
+        <div className="detail-heading"><div><span>{selectedExercise.muscle}</span><h2>{selectedExercise.name}</h2></div><small>{selectedExercise.level}</small></div>
+        <div className="equipment">Инвентарь: <strong>{selectedExercise.equipment}</strong></div>
+        <h3>Как выполнять</h3>
+        <ol>{selectedExercise.steps.map(step=><li key={step}>{step}</li>)}</ol>
+        <div className="mistake"><strong>Обратите внимание</strong><span>{selectedExercise.mistakes}</span></div>
+        <button className="primary light-primary" onClick={()=>addCatalogExercise(selectedExercise.name,selectedExercise.muscle)}>+ Добавить в тренировку</button>
+      </div>:<>
+        <div className="eyebrow">КАТАЛОГ · {catalog.length} УПРАЖНЕНИЙ</div><h2>Выберите упражнение</h2>
+        <input className="search-input" placeholder="Название, мышца или инвентарь" value={catalogSearch} onChange={e=>setCatalogSearch(e.target.value)}/>
+        <div className="filter-row">{muscles.map(m=><button className={m===muscleFilter?"active":""} key={m} onClick={()=>setMuscleFilter(m)}>{m}</button>)}</div>
+        <div className="catalog-list">{filteredCatalog.map(item=><article className="catalog-card" key={item.name}>
+          <button className="catalog-info" onClick={()=>setSelectedExercise(item)}><ExerciseImage item={item}/><span><strong>{item.name}</strong><small>{item.muscle} · {item.equipment}</small><em>Техника и описание →</em></span></button>
+          <button className="catalog-add" aria-label={`Добавить ${item.name}`} onClick={()=>addCatalogExercise(item.name,item.muscle)}>+</button>
+        </article>)}</div>
+        <button className="add-set custom-button" onClick={customExercise}>+ Создать своё упражнение</button>
+      </>}
     </section></div>}
 
     {measurementOpen&&<div className="modal-backdrop" onClick={()=>setMeasurementOpen(false)}><section className="settings-modal" role="dialog" aria-modal="true" aria-label="Новый замер" onClick={e=>e.stopPropagation()}>
