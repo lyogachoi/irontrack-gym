@@ -304,6 +304,18 @@ export default function Home() {
   const monthVolume = state.history.reduce((s,h) => s+h.volume,0);
   const chart = useMemo(() => [...state.history].slice(0,6).reverse().map(s => s.volume), [state.history]);
   const previousByName = (name:string) => state.history.find(h => h.exercises?.some(e => e.name === name))?.exercises?.find(e => e.name === name);
+  const weekStats = useMemo(() => {
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setHours(0,0,0,0);
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    const sessions = state.history.filter(h => new Date(`${h.iso}T12:00:00`) >= monday);
+    return {
+      count: sessions.length,
+      volume: sessions.reduce((sum, session) => sum + session.volume, 0),
+      trainedToday: sessions.some(session => session.iso === todayIso()),
+    };
+  }, [state.history]);
 
   const records = useMemo(() => {
     const map = new Map<string,{weight:number; oneRm:number}>();
@@ -436,7 +448,12 @@ export default function Home() {
     </section></div>}
 
     {tab==="home"&&<section className="screen home-screen">
-      <div className="eyebrow">СЕГОДНЯ · {formatDate(todayIso()).toUpperCase()}</div><h1>Пора стать<br/><em>сильнее.</em></h1><p className="lead">Выберите программу и продолжайте прогресс.</p>
+      <div className="eyebrow">СЕГОДНЯ · {formatDate(todayIso()).toUpperCase()}</div>
+      <article className="week-widget">
+        <div className="week-ring" style={{"--week-progress":`${Math.min(100,weekStats.count/3*100)}%`} as React.CSSProperties}><strong>{weekStats.count}</strong><span>/ 3</span></div>
+        <div className="week-copy"><small>ЦЕЛЬ НА НЕДЕЛЮ</small><h2>{weekStats.trainedToday?"Тренировка записана":"Ваш темп"}</h2><p>{weekStats.count>=3?"Цель выполнена — отличная неделя.":`Осталось ${3-weekStats.count} ${3-weekStats.count===1?"тренировка":"тренировки"} до цели.`}</p></div>
+        <button onClick={()=>setTab("history")}><strong>{(weekStats.volume/1000).toFixed(1)} т</strong><span>объём ↗</span></button>
+      </article>
       <div className="program-picker"><button onClick={()=>setProgramsOpen(true)}><span><small>ТЕКУЩАЯ ПРОГРАММА</small><strong>{activeTemplate.name}</strong></span><b>Изменить</b></button></div>
       <article className="workout-card"><div className="card-top"><span className="tag">СЕГОДНЯ</span><span className="duration">≈ {Math.max(35,activeTemplate.exercises.length*15)} мин</span></div><h2>{activeTemplate.name}</h2><p>{activeTemplate.subtitle}</p>
         <div className="exercise-preview">{activeTemplate.exercises.slice(0,4).map((e,i)=><div key={e.id}><b>{String(i+1).padStart(2,"0")}</b><span>{e.name}<small>{e.sets.length} подхода</small></span></div>)}</div>

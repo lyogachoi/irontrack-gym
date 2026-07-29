@@ -242,6 +242,18 @@ header { height:82px; padding:0 20px; border-bottom:0; background:#f8f9f4d9; bac
 .eyebrow { color:#8a8e83; letter-spacing:2.1px; margin-bottom:10px; }
 h1 { font-size:45px; line-height:.96; letter-spacing:-2.6px; }
 .lead { max-width:330px; color:#7d8177; font-size:13px; }
+.week-widget { display:grid; grid-template-columns:64px 1fr auto; gap:14px; align-items:center; background:white; border:1px solid var(--line); border-radius:22px; padding:16px; margin:4px 0 14px; box-shadow:0 10px 30px #272a2110; }
+.week-ring { --week-progress:0%; width:62px; height:62px; border-radius:50%; display:grid; place-content:center; text-align:center; background:radial-gradient(circle,#fff 58%,transparent 60%),conic-gradient(var(--acid) var(--week-progress),#e7e9e1 0); }
+.week-ring strong { font-size:20px; line-height:20px; }
+.week-ring span { color:#92968b; font-size:8px; }
+.week-copy { min-width:0; }
+.week-copy small { color:#92968b; font-size:7px; font-weight:800; letter-spacing:1.3px; }
+.week-copy h2 { margin:4px 0 3px; font-size:16px; letter-spacing:-.5px; }
+.week-copy p { margin:0; color:#7d8177; font-size:9px; line-height:1.35; }
+.week-widget>button { border:0; background:var(--soft); border-radius:12px; padding:10px 9px; text-align:right; }
+.week-widget>button strong,.week-widget>button span { display:block; white-space:nowrap; }
+.week-widget>button strong { font-size:12px; }
+.week-widget>button span { color:#85897f; font-size:7px; margin-top:2px; }
 .program-picker { margin-bottom:12px; }
 .program-picker>button { border:0; padding:13px 15px; border-radius:15px; box-shadow:0 5px 18px #2221; }
 .program-picker span small { color:#999d91; }
@@ -326,6 +338,8 @@ nav svg { width:20px; height:20px; }
 @media (max-width:380px) {
   h1 { font-size:39px; }
   .screen { padding-left:16px; padding-right:16px; }
+  .week-widget { grid-template-columns:58px 1fr; }
+  .week-widget>button { display:none; }
   .home-shortcuts { gap:6px; }
   .home-shortcuts button { padding:11px 8px; }
   .catalog-info { grid-template-columns:96px 1fr; }
