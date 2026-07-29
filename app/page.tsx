@@ -389,7 +389,7 @@ export default function Home() {
   const trainedDays=new Set(state.history.filter(h=>h.iso.slice(0,7)===todayIso().slice(0,7)).map(h=>Number(h.iso.slice(8,10))));
 
   return <main className="shell">
-    <header><button className="brand" onClick={()=>setTab("home")} aria-label="На главную"><span>IR</span> IronTrack</button><button className="avatar" onClick={()=>setSettings(true)} aria-label="Настройки и данные">А</button></header>
+    <header><button className="brand" onClick={()=>setTab("home")} aria-label="На главную"><span>IR</span><b>IronTrack<small>TRAIN SMART</small></b></button><button className="avatar" onClick={()=>setSettings(true)} aria-label="Настройки и данные">⚙</button></header>
 
     {settings&&<div className="modal-backdrop" onClick={()=>setSettings(false)}><section className="settings-modal" role="dialog" aria-modal="true" aria-label="Настройки и данные" onClick={e=>e.stopPropagation()}>
       <button className="modal-close" onClick={()=>setSettings(false)} aria-label="Закрыть">×</button><div className="eyebrow">ДАННЫЕ И ПРИЛОЖЕНИЕ</div><h2>Всё под контролем.</h2>
@@ -443,6 +443,11 @@ export default function Home() {
         <button className="primary" disabled={!activeTemplate.exercises.length} onClick={()=>{setExercises(cloneExercises(activeTemplate.exercises));setStarted(true);setTab("workout")}}>Начать тренировку <span>→</span></button>
       </article>
       <div className="section-title"><h3>Этот месяц</h3><button onClick={()=>setTab("progress")}>Подробнее</button></div><div className="stats"><div><strong>{state.history.length}</strong><span>тренировки</span></div><div><strong>{(monthVolume/1000).toFixed(1)}<small>т</small></strong><span>объём</span></div><div><strong>{records.length}</strong><span>рекорды</span></div></div>
+      <div className="home-shortcuts">
+        <button onClick={()=>setCatalogOpen(true)}><span>80</span><strong>Упражнения</strong><small>Техника и поиск</small></button>
+        <button onClick={()=>setTab("progress")}><span>↗</span><strong>Прогресс</strong><small>Рекорды и замеры</small></button>
+        <button onClick={()=>setTab("history")}><span>◷</span><strong>История</strong><small>Календарь и отчёт</small></button>
+      </div>
     </section>}
 
     {tab==="workout"&&<section className="screen"><div className="workout-head"><div><div className="eyebrow">ТРЕНИРОВКА В ПРОЦЕССЕ</div><h1>{activeTemplate.name}</h1></div><div className="timer">{fmt(seconds)}<small>{doneSets} / {allSets.length} подходов</small></div></div>
