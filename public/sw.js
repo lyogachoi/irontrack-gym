@@ -1,4 +1,4 @@
-const CACHE = "irontrack-v3";
+const CACHE = "irontrack-v4";
 const ROOT = self.registration.scope;
 const CORE = ["", "manifest.webmanifest", "icon.svg", "icon-192.svg", "icon-512.svg"].map(path => new URL(path, ROOT).toString());
 

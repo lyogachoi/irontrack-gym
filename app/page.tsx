@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type SetRow = { id: number; weight: number; reps: number; done: boolean };
-type Exercise = { id: number; name: string; muscle: string; restSeconds: number; sets: SetRow[] };
-type CompletedExercise = { name: string; muscle: string; sets: { weight: number; reps: number }[] };
+type SetKind = "Разминка" | "Рабочий" | "Дроп-сет" | "До отказа" | "Восстановительный";
+type Progression = { minReps: number; maxReps: number; targetSets: number; weightStep: number };
+type SetRow = { id: number; weight: number; reps: number; done: boolean; rir: number; kind: SetKind };
+type Exercise = { id: number; name: string; muscle: string; restSeconds: number; sets: SetRow[]; progression?: Progression };
+type CompletedSet = { weight: number; reps: number; rir?: number; kind?: SetKind };
+type CompletedExercise = { name: string; muscle: string; sets: CompletedSet[] };
 type Session = { id: number; iso: string; date: string; title: string; volume: number; duration: number; exercises?: CompletedExercise[] };
 type Template = { id: number; name: string; subtitle: string; exercises: Exercise[] };
 type Measurement = { id: number; iso: string; weight: number; waist: number; chest: number; arm: number; photo?: string };
@@ -21,8 +24,14 @@ const cloudSyncEnabled = process.env.NEXT_PUBLIC_CLOUD_SYNC !== "false";
 const localIso = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 const todayIso = () => localIso();
 const formatDate = (iso: string) => new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" }).format(new Date(`${iso}T12:00:00`)).replace(".", "");
-const setRows = (weights: number[][]) => weights.map((v, i) => ({ id: i + 1, weight: v[0], reps: v[1], done: false }));
-const cloneExercises = (items: Exercise[]) => items.map(e => ({ ...e, sets: e.sets.map(s => ({ ...s, done: false })) }));
+const defaultProgression: Progression = { minReps: 8, maxReps: 12, targetSets: 3, weightStep: 2.5 };
+const normalizeExercise = (e: Exercise) => ({
+  ...e,
+  progression: e.progression || { ...defaultProgression },
+  sets: e.sets.map(s => ({ ...s, rir: s.rir ?? 2, kind: s.kind || "Рабочий" as SetKind })),
+});
+const setRows = (weights: number[][]) => weights.map((v, i) => ({ id: i + 1, weight: v[0], reps: v[1], done: false, rir: 2, kind: "Рабочий" as SetKind }));
+const cloneExercises = (items: Exercise[]) => items.map(e => ({ ...normalizeExercise(e), sets: normalizeExercise(e).sets.map(s => ({ ...s, done: false })) }));
 
 const exercise = (
   name: string, muscle: string, equipment: string, sheet: CatalogExercise["sheet"], slot: number,
@@ -256,6 +265,7 @@ export default function Home() {
         });
         value = {
           ...value,
+          templates: value.templates.map(t => ({...t, exercises:t.exercises.map(normalizeExercise)})),
           history,
           measurements: value.measurements || [],
           activeTemplateId: value.activeTemplateId || value.templates[0].id,
@@ -269,7 +279,7 @@ export default function Home() {
         const active = JSON.parse(localStorage.getItem("irontrack-active-workout") || "null") as ActiveWorkout | null;
         if (active?.exercises?.length) {
           setState(s=>({...s,activeTemplateId:active.templateId}));
-          setExercises(active.exercises); setSeconds(active.seconds || 0); setRest(active.rest || 0); setStarted(true); setTab("workout"); restored = true;
+          setExercises(active.exercises.map(normalizeExercise)); setSeconds(active.seconds || 0); setRest(active.rest || 0); setStarted(true); setTab("workout"); restored = true;
         }
       } catch {}
       if (!restored) setExercises(cloneExercises(template.exercises));
@@ -380,8 +390,11 @@ export default function Home() {
     const templates=state.templates.filter(t=>t.id!==id); setState(s=>({...s,templates,activeTemplateId:templates[0].id}));
     setExercises(cloneExercises(templates[0].exercises));
   }
-  function updateSet(exerciseId:number,setId:number,key:"weight"|"reps",value:number) {
+  function updateSet(exerciseId:number,setId:number,key:"weight"|"reps"|"rir"|"kind",value:number|string) {
     setExercises(items=>items.map(e=>e.id===exerciseId?{...e,sets:e.sets.map(s=>s.id===setId?{...s,[key]:value}:s)}:e));
+  }
+  function updateProgression(exerciseId:number,key:keyof Progression,value:number) {
+    setExercises(items=>items.map(e=>e.id===exerciseId?{...e,progression:{...defaultProgression,...e.progression,[key]:value}}:e));
   }
   function syncTemplate(next:Exercise[]) {
     setExercises(next); setState(s=>({...s,templates:s.templates.map(t=>t.id===s.activeTemplateId?{...t,exercises:next.map(e=>({...e,sets:e.sets.map(x=>({...x,done:false}))}))}:t)}));
@@ -403,15 +416,37 @@ export default function Home() {
   }
   function fillPrevious(exerciseId:number,name:string) {
     const previous=previousByName(name); if(!previous)return;
-    setExercises(items=>items.map(e=>e.id===exerciseId?{...e,sets:previous.sets.map((s,i)=>({id:Date.now()+i,weight:s.weight,reps:s.reps,done:false}))}:e));
+    setExercises(items=>items.map(e=>e.id===exerciseId?{...e,sets:previous.sets.map((s,i)=>({id:Date.now()+i,weight:s.weight,reps:s.reps,done:false,rir:s.rir??2,kind:s.kind||"Рабочий"}))}:e));
   }
-  function recommendation(name:string) {
-    const previous=previousByName(name); if(!previous?.sets.length)return null;
-    const best=[...previous.sets].sort((a,b)=>b.weight-a.weight||b.reps-a.reps)[0];
-    return best.reps>=10?`${Math.round((best.weight+2.5)*10)/10} × ${Math.max(6,best.reps-2)}`:`${best.weight} × ${best.reps+1}`;
+  function recommendation(exerciseItem:Exercise) {
+    const sessions=state.history.flatMap(h=>{
+      const item=h.exercises?.find(e=>e.name===exerciseItem.name);
+      return item?[{...item,iso:h.iso}]:[];
+    }).slice(0,3);
+    if(!sessions.length)return null;
+    const p=exerciseItem.progression || defaultProgression;
+    const working=(sets:CompletedSet[])=>sets.filter(s=>!s.kind||s.kind==="Рабочий");
+    const latest=working(sessions[0].sets).slice(0,p.targetSets);
+    if(!latest.length)return null;
+    const weight=Math.max(...latest.map(s=>s.weight));
+    const formatWeight=(v:number)=>Number(v.toFixed(2)).toLocaleString("ru");
+    const previous=`${formatWeight(weight)} кг × ${latest.map(s=>s.reps).join(", ")}`;
+    const reachedTop=latest.length>=p.targetSets&&latest.every(s=>s.reps>=p.maxReps&&(s.rir??2)>=1&&(s.rir??2)<=3);
+    const sessionScore=(sets:CompletedSet[])=>working(sets).slice(0,p.targetSets).reduce((sum,s)=>sum+s.weight*s.reps,0);
+    const falling=sessions.length>=3
+      &&sessionScore(sessions[0].sets)<sessionScore(sessions[1].sets)*.95
+      &&sessionScore(sessions[1].sets)<sessionScore(sessions[2].sets)*.95;
+    if(falling) {
+      const reduced=Math.max(p.weightStep,Math.round((weight*.925)/p.weightStep)*p.weightStep);
+      return {previous,today:`${formatWeight(reduced)} кг × ${p.minReps}–${p.maxReps}`,reason:"Результат снижается две тренировки подряд — разгрузка на 5–10%.",tone:"down"};
+    }
+    if(reachedTop) {
+      return {previous,today:`${formatWeight(weight+p.weightStep)} кг × ${p.minReps}–${Math.min(p.maxReps,p.minReps+2)}`,reason:`Все ${p.targetSets} рабочих подхода достигли верхней границы с RIR 1–3.`,tone:"up"};
+    }
+    return {previous,today:`${formatWeight(weight)} кг × ${p.minReps}–${p.maxReps}`,reason:"Оставьте вес: верхняя граница диапазона достигнута ещё не во всех подходах.",tone:"hold"};
   }
   function addCatalogExercise(name:string,muscle:string) {
-    const next=[...exercises,{id:Date.now(),name,muscle,restSeconds:90,sets:setRows([[20,10],[20,10],[20,10]])}];
+    const next=[...exercises,{id:Date.now(),name,muscle,restSeconds:90,sets:setRows([[20,10],[20,10],[20,10]]),progression:{...defaultProgression}}];
     syncTemplate(next); setCatalogOpen(false); setCatalogSearch("");
   }
   function customExercise() {
@@ -420,7 +455,7 @@ export default function Home() {
   }
   function finishWorkout() {
     if(!doneSets)return;
-    const completed:CompletedExercise[]=exercises.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps}))})).filter(e=>e.sets.length);
+    const completed:CompletedExercise[]=exercises.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps,rir:s.rir,kind:s.kind}))})).filter(e=>e.sets.length);
     const session:Session={id:Date.now(),iso:todayIso(),date:formatDate(todayIso()),title:activeTemplate.name,volume:liveVolume,duration:Math.max(1,Math.round(seconds/60)),exercises:completed};
     setState(s=>({...s,history:[session,...s.history]})); setExercises(cloneExercises(activeTemplate.exercises));
     setStarted(false);setSeconds(0);setRest(0);setTab("home");
@@ -530,10 +565,22 @@ export default function Home() {
       {rest>0&&<div className="rest"><span>Отдых</span><strong>{fmt(rest)}</strong><button onClick={()=>setRest(0)}>Пропустить</button></div>}
       <div className="exercise-list">{exercises.map((ex,exIndex)=><article className="exercise" key={ex.id}><div className="exercise-title"><div><span>{ex.muscle}</span><h2>{ex.name}</h2></div><select aria-label={`Отдых ${ex.name}`} value={ex.restSeconds} onChange={e=>setExercises(items=>items.map(x=>x.id===ex.id?{...x,restSeconds:Number(e.target.value)}:x))}><option value="60">60 с</option><option value="90">90 с</option><option value="120">2 мин</option><option value="180">3 мин</option></select></div>
         {previousByName(ex.name)&&<div className="previous">Прошлый раз: {previousByName(ex.name)?.sets.map(s=>`${s.weight}×${s.reps}`).join(" · ")}</div>}
-        {recommendation(ex.name)&&<div className="recommendation"><span>Рекомендация сегодня</span><strong>{recommendation(ex.name)}</strong><button onClick={()=>fillPrevious(ex.id,ex.name)}>Заполнить как раньше</button></div>}
+        {(()=>{const tip=recommendation(ex);return tip&&<div className={`recommendation ${tip.tone}`}>
+          <span>УМНАЯ ПРОГРЕССИЯ</span><strong>{tip.today}</strong>
+          <small>Прошлый раз: {tip.previous}</small><p>{tip.reason}</p>
+          <button onClick={()=>fillPrevious(ex.id,ex.name)}>Заполнить как раньше</button>
+        </div>})()}
+        <div className="progression-settings">
+          <label><span>Повторы</span><div><input aria-label={`Минимум повторений ${ex.name}`} type="number" value={(ex.progression||defaultProgression).minReps} onChange={e=>updateProgression(ex.id,"minReps",Number(e.target.value))}/><b>–</b><input aria-label={`Максимум повторений ${ex.name}`} type="number" value={(ex.progression||defaultProgression).maxReps} onChange={e=>updateProgression(ex.id,"maxReps",Number(e.target.value))}/></div></label>
+          <label><span>Рабочих подходов</span><input type="number" min="1" max="10" value={(ex.progression||defaultProgression).targetSets} onChange={e=>updateProgression(ex.id,"targetSets",Number(e.target.value))}/></label>
+          <label><span>Шаг веса, кг</span><input type="number" min=".5" step=".5" value={(ex.progression||defaultProgression).weightStep} onChange={e=>updateProgression(ex.id,"weightStep",Number(e.target.value))}/></label>
+        </div>
         <div className="exercise-tools"><button disabled={exIndex===0} onClick={()=>moveExercise(exIndex,-1)}>↑</button><button disabled={exIndex===exercises.length-1} onClick={()=>moveExercise(exIndex,1)}>↓</button><button className="remove-exercise" onClick={()=>removeExercise(ex.id)} aria-label={`Удалить упражнение ${ex.name}`}><Icon name="trash"/><span>Удалить</span></button></div>
         <div className="set-head"><span>ПОДХОД</span><span>КГ</span><span>ПОВТ.</span><span/></div>
-        {ex.sets.map((s,i)=><div className={`set-row ${s.done?"complete":""}`} key={s.id}><button className="set-number" aria-label={`Удалить подход ${i+1}`} onClick={()=>removeSet(ex.id,s.id)}>{i+1}<small>×</small></button><input aria-label={`Вес ${ex.name} ${i+1}`} type="number" value={s.weight} onChange={e=>updateSet(ex.id,s.id,"weight",Number(e.target.value))}/><input aria-label={`Повторения ${ex.name} ${i+1}`} type="number" value={s.reps} onChange={e=>updateSet(ex.id,s.id,"reps",Number(e.target.value))}/><button aria-label={`${s.done?"Отменить":"Завершить"} ${ex.name} ${i+1}`} className="check" onClick={()=>toggleSet(ex.id,s.id)}><Icon name="check"/></button></div>)}
+        {ex.sets.map((s,i)=><div className={`set-block ${s.done?"complete":""}`} key={s.id}>
+          <div className="set-row"><button className="set-number" aria-label={`Удалить подход ${i+1}`} onClick={()=>removeSet(ex.id,s.id)}>{i+1}<small>×</small></button><input aria-label={`Вес ${ex.name} ${i+1}`} type="number" value={s.weight} onChange={e=>updateSet(ex.id,s.id,"weight",Number(e.target.value))}/><input aria-label={`Повторения ${ex.name} ${i+1}`} type="number" value={s.reps} onChange={e=>updateSet(ex.id,s.id,"reps",Number(e.target.value))}/><button aria-label={`${s.done?"Отменить":"Завершить"} ${ex.name} ${i+1}`} className="check" onClick={()=>toggleSet(ex.id,s.id)}><Icon name="check"/></button></div>
+          <div className="set-meta"><label><span>Тип</span><select value={s.kind} onChange={e=>updateSet(ex.id,s.id,"kind",e.target.value)}>{(["Разминка","Рабочий","Дроп-сет","До отказа","Восстановительный"] as SetKind[]).map(kind=><option key={kind}>{kind}</option>)}</select></label><label><span>RIR</span><select value={s.rir} onChange={e=>updateSet(ex.id,s.id,"rir",Number(e.target.value))}>{[0,1,2,3,4,5].map(rir=><option key={rir} value={rir}>{rir===0?"0 · отказ":rir}</option>)}</select></label></div>
+        </div>)}
         <button className="add-set" onClick={()=>setExercises(items=>items.map(x=>x.id===ex.id?{...x,sets:[...x.sets,{...x.sets[x.sets.length-1],id:Date.now(),done:false}]}:x))}>+ Добавить подход</button>
       </article>)}</div>
       <button className="add-exercise" onClick={()=>setCatalogOpen(true)}><Icon name="plus"/> Каталог упражнений</button><button className="finish" disabled={!doneSets} onClick={finishWorkout}>Завершить тренировку</button>
