@@ -44,21 +44,61 @@ export default function Home() {
   const [seconds, setSeconds] = useState(0);
   const [rest, setRest] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("Сохранено на устройстве");
+
+  async function readIndexedBackup() {
+    return new Promise<{ exercises: Exercise[]; history: Session[] } | null>((resolve) => {
+      if (!("indexedDB" in window)) return resolve(null);
+      const request = indexedDB.open("irontrack", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("state");
+      request.onerror = () => resolve(null);
+      request.onsuccess = () => {
+        const tx = request.result.transaction("state", "readonly");
+        const get = tx.objectStore("state").get("latest");
+        get.onsuccess = () => resolve(get.result || null);
+        get.onerror = () => resolve(null);
+      };
+    });
+  }
+
+  async function writeIndexedBackup(value: { exercises: Exercise[]; history: Session[] }) {
+    if (!("indexedDB" in window)) return;
+    const request = indexedDB.open("irontrack", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("state");
+    request.onsuccess = () => {
+      const tx = request.result.transaction("state", "readwrite");
+      tx.objectStore("state").put(value, "latest");
+    };
+  }
 
   useEffect(() => {
-    const saved = localStorage.getItem("irontrack-state");
-    if (saved) {
-      try {
-        const value = JSON.parse(saved);
+    (async () => {
+      const saved = localStorage.getItem("irontrack-state");
+      let value = null;
+      if (saved) {
+        try { value = JSON.parse(saved); } catch {}
+      }
+      if (!value) value = await readIndexedBackup();
+      if (value) {
         setExercises(value.exercises || starter);
         setHistory(value.history || seedHistory);
-      } catch {}
-    }
-    setLoaded(true);
+      }
+      if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+      if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+      setLoaded(true);
+    })();
   }, []);
 
   useEffect(() => {
-    if (loaded) localStorage.setItem("irontrack-state", JSON.stringify({ exercises, history }));
+    if (loaded) {
+      const value = { exercises, history };
+      setSaveStatus("Сохраняю…");
+      localStorage.setItem("irontrack-state", JSON.stringify(value));
+      writeIndexedBackup(value);
+      const id = window.setTimeout(() => setSaveStatus("Сохранено на устройстве"), 350);
+      return () => window.clearTimeout(id);
+    }
   }, [exercises, history, loaded]);
 
   useEffect(() => {
@@ -103,12 +143,52 @@ export default function Home() {
     setStarted(false); setSeconds(0); setRest(0); setTab("home");
   }
 
+  function exportData() {
+    const blob = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), exercises, history }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `irontrack-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importData(file?: File) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const value = JSON.parse(String(reader.result));
+        if (!Array.isArray(value.exercises) || !Array.isArray(value.history)) throw new Error();
+        setExercises(value.exercises);
+        setHistory(value.history);
+        setSaveStatus("Резервная копия восстановлена");
+        setSettings(false);
+      } catch {
+        window.alert("Не удалось прочитать резервную копию IronTrack.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
   return (
     <main className="shell">
       <header>
         <button className="brand" onClick={() => setTab("home")} aria-label="На главную"><span>IR</span> IronTrack</button>
-        <div className="avatar">А</div>
+        <button className="avatar" onClick={() => setSettings(true)} aria-label="Настройки и данные">А</button>
       </header>
+
+      {settings && <div className="modal-backdrop" role="presentation" onClick={() => setSettings(false)}>
+        <section className="settings-modal" role="dialog" aria-modal="true" aria-label="Настройки и данные" onClick={e => e.stopPropagation()}>
+          <button className="modal-close" onClick={() => setSettings(false)} aria-label="Закрыть">×</button>
+          <div className="eyebrow">ДАННЫЕ И ПРИЛОЖЕНИЕ</div>
+          <h2>Всё под контролем.</h2>
+          <div className="save-state"><i/><div><strong>{saveStatus}</strong><span>Работает и без интернета</span></div></div>
+          <button className="data-button" onClick={exportData}><span>↓</span><div><strong>Скачать копию</strong><small>Все тренировки в одном файле</small></div></button>
+          <label className="data-button"><span>↑</span><div><strong>Восстановить данные</strong><small>Загрузить ранее сохранённую копию</small></div><input type="file" accept="application/json,.json" onChange={e => importData(e.target.files?.[0])}/></label>
+          <p className="privacy-note">Данные хранятся только на этом устройстве и не передаются третьим лицам. Для переноса используйте резервную копию.</p>
+        </section>
+      </div>}
 
       {tab === "home" && <section className="screen home-screen">
         <div className="eyebrow">СРЕДА · 29 ИЮЛЯ</div>
