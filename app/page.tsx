@@ -9,6 +9,7 @@ type Session = { id: number; iso: string; date: string; title: string; volume: n
 type Template = { id: number; name: string; subtitle: string; exercises: Exercise[] };
 type Measurement = { id: number; iso: string; weight: number; waist: number; chest: number; arm: number; photo?: string };
 type SavedState = { templates: Template[]; activeTemplateId: number; history: Session[]; measurements: Measurement[] };
+type ActiveWorkout = { templateId: number; exercises: Exercise[]; seconds: number; rest: number };
 type CatalogExercise = {
   name: string; muscle: string; equipment: string; level: "Начальный" | "Средний";
   sheet: "chest" | "back" | "legs" | "arms" | "core"; slot: number;
@@ -17,7 +18,8 @@ type CatalogExercise = {
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const cloudSyncEnabled = process.env.NEXT_PUBLIC_CLOUD_SYNC !== "false";
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const localIso = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+const todayIso = () => localIso();
 const formatDate = (iso: string) => new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" }).format(new Date(`${iso}T12:00:00`)).replace(".", "");
 const setRows = (weights: number[][]) => weights.map((v, i) => ({ id: i + 1, weight: v[0], reps: v[1], done: false }));
 const cloneExercises = (items: Exercise[]) => items.map(e => ({ ...e, sets: e.sets.map(s => ({ ...s, done: false })) }));
@@ -253,7 +255,15 @@ export default function Home() {
       const next = value || initialState;
       setState(next);
       const template = next.templates.find(t => t.id === next.activeTemplateId) || next.templates[0];
-      setExercises(cloneExercises(template.exercises));
+      let restored = false;
+      try {
+        const active = JSON.parse(localStorage.getItem("irontrack-active-workout") || "null") as ActiveWorkout | null;
+        if (active?.exercises?.length) {
+          setState(s=>({...s,activeTemplateId:active.templateId}));
+          setExercises(active.exercises); setSeconds(active.seconds || 0); setRest(active.rest || 0); setStarted(true); setTab("workout"); restored = true;
+        }
+      } catch {}
+      if (!restored) setExercises(cloneExercises(template.exercises));
       if ("serviceWorker" in navigator) navigator.serviceWorker.register(`${basePath}/sw.js`).catch(() => {});
       if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
       setLoaded(true); setSaveStatus("Сохранено на устройстве");
@@ -274,6 +284,16 @@ export default function Home() {
     }, 350);
     return () => clearTimeout(id);
   }, [state, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    if (!started) {
+      localStorage.removeItem("irontrack-active-workout");
+      return;
+    }
+    const active:ActiveWorkout = {templateId:state.activeTemplateId,exercises,seconds,rest};
+    localStorage.setItem("irontrack-active-workout",JSON.stringify(active));
+  }, [started,exercises,seconds,rest,state.activeTemplateId,loaded]);
 
   useEffect(() => {
     if (!started) return;
@@ -301,7 +321,10 @@ export default function Home() {
   const doneSets = allSets.filter(s => s.done).length;
   const liveVolume = allSets.filter(s => s.done).reduce((n,s) => n + s.weight*s.reps, 0);
   const fmt = (v:number) => `${String(Math.floor(v/60)).padStart(2,"0")}:${String(v%60).padStart(2,"0")}`;
-  const monthVolume = state.history.reduce((s,h) => s+h.volume,0);
+  const currentMonth = todayIso().slice(0,7);
+  const monthSessions = state.history.filter(h=>h.iso.slice(0,7)===currentMonth);
+  const monthVolume = monthSessions.reduce((s,h) => s+h.volume,0);
+  const allTimeVolume = state.history.reduce((s,h) => s+h.volume,0);
   const chart = useMemo(() => [...state.history].slice(0,6).reverse().map(s => s.volume), [state.history]);
   const previousByName = (name:string) => state.history.find(h => h.exercises?.some(e => e.name === name))?.exercises?.find(e => e.name === name);
   const weekStats = useMemo(() => {
@@ -324,7 +347,7 @@ export default function Home() {
       const prev = map.get(e.name);
       if (!prev || oneRm > prev.oneRm) map.set(e.name,{weight:s.weight,oneRm});
     }));
-    return [...map.entries()].sort((a,b) => b[1].oneRm-a[1].oneRm).slice(0,6);
+    return [...map.entries()].sort((a,b) => b[1].oneRm-a[1].oneRm);
   }, [state.history]);
 
   const reportSessions = useMemo(() => {
@@ -356,8 +379,27 @@ export default function Home() {
   }
   function toggleSet(exerciseId:number,setId:number) {
     const ex=exercises.find(e=>e.id===exerciseId);
+    const row=ex?.sets.find(s=>s.id===setId);
     setExercises(items=>items.map(e=>e.id===exerciseId?{...e,sets:e.sets.map(s=>s.id===setId?{...s,done:!s.done}:s)}:e));
-    setRest(ex?.restSeconds || 90);
+    if (!row?.done) setRest(ex?.restSeconds || 90);
+  }
+  function removeSet(exerciseId:number,setId:number) {
+    setExercises(items=>items.map(e=>e.id===exerciseId?{...e,sets:e.sets.filter(s=>s.id!==setId)}:e));
+  }
+  function removeExercise(exerciseId:number) {
+    setExercises(items=>items.filter(e=>e.id!==exerciseId));
+  }
+  function moveExercise(index:number,direction:-1|1) {
+    setExercises(items=>{const next=[...items],target=index+direction;if(target<0||target>=next.length)return items;[next[index],next[target]]=[next[target],next[index]];return next;});
+  }
+  function fillPrevious(exerciseId:number,name:string) {
+    const previous=previousByName(name); if(!previous)return;
+    setExercises(items=>items.map(e=>e.id===exerciseId?{...e,sets:previous.sets.map((s,i)=>({id:Date.now()+i,weight:s.weight,reps:s.reps,done:false}))}:e));
+  }
+  function recommendation(name:string) {
+    const previous=previousByName(name); if(!previous?.sets.length)return null;
+    const best=[...previous.sets].sort((a,b)=>b.weight-a.weight||b.reps-a.reps)[0];
+    return best.reps>=10?`${Math.round((best.weight+2.5)*10)/10} × ${Math.max(6,best.reps-2)}`:`${best.weight} × ${best.reps+1}`;
   }
   function addCatalogExercise(name:string,muscle:string) {
     const next=[...exercises,{id:Date.now(),name,muscle,restSeconds:90,sets:setRows([[20,10],[20,10],[20,10]])}];
@@ -373,6 +415,13 @@ export default function Home() {
     const session:Session={id:Date.now(),iso:todayIso(),date:formatDate(todayIso()),title:activeTemplate.name,volume:liveVolume,duration:Math.max(1,Math.round(seconds/60)),exercises:completed};
     setState(s=>({...s,history:[session,...s.history]})); setExercises(cloneExercises(activeTemplate.exercises));
     setStarted(false);setSeconds(0);setRest(0);setTab("home");
+  }
+  function editSessionDate(session:Session) {
+    const iso=prompt("Дата тренировки (ГГГГ-ММ-ДД)",session.iso); if(!iso||!/^\d{4}-\d{2}-\d{2}$/.test(iso))return;
+    setState(s=>({...s,history:s.history.map(h=>h.id===session.id?{...h,iso,date:formatDate(iso)}:h)}));
+  }
+  function deleteSession(id:number) {
+    if(confirm("Удалить эту тренировку из истории?"))setState(s=>({...s,history:s.history.filter(h=>h.id!==id)}));
   }
   function addMeasurement() {
     const item:Measurement={id:Date.now(),iso:todayIso(),weight:Number(measureForm.weight)||0,waist:Number(measureForm.waist)||0,chest:Number(measureForm.chest)||0,arm:Number(measureForm.arm)||0,photo:measureForm.photo||undefined};
@@ -459,7 +508,7 @@ export default function Home() {
         <div className="exercise-preview">{activeTemplate.exercises.slice(0,4).map((e,i)=><div key={e.id}><b>{String(i+1).padStart(2,"0")}</b><span>{e.name}<small>{e.sets.length} подхода</small></span></div>)}</div>
         <button className="primary" disabled={!activeTemplate.exercises.length} onClick={()=>{setExercises(cloneExercises(activeTemplate.exercises));setStarted(true);setTab("workout")}}>Начать тренировку <span>→</span></button>
       </article>
-      <div className="section-title"><h3>Этот месяц</h3><button onClick={()=>setTab("progress")}>Подробнее</button></div><div className="stats"><div><strong>{state.history.length}</strong><span>тренировки</span></div><div><strong>{(monthVolume/1000).toFixed(1)}<small>т</small></strong><span>объём</span></div><div><strong>{records.length}</strong><span>рекорды</span></div></div>
+      <div className="section-title"><h3>Этот месяц</h3><button onClick={()=>setTab("progress")}>Подробнее</button></div><div className="stats"><div><strong>{monthSessions.length}</strong><span>тренировки</span></div><div><strong>{(monthVolume/1000).toFixed(1)}<small>т</small></strong><span>объём</span></div><div><strong>{records.length}</strong><span>рекорды</span></div></div>
       <div className="home-shortcuts">
         <button onClick={()=>setCatalogOpen(true)}><span>80</span><strong>Упражнения</strong><small>Техника и поиск</small></button>
         <button onClick={()=>setTab("progress")}><span>↗</span><strong>Прогресс</strong><small>Рекорды и замеры</small></button>
@@ -470,19 +519,21 @@ export default function Home() {
     {tab==="workout"&&<section className="screen"><div className="workout-head"><div><div className="eyebrow">ТРЕНИРОВКА В ПРОЦЕССЕ</div><h1>{activeTemplate.name}</h1></div><div className="timer">{fmt(seconds)}<small>{doneSets} / {allSets.length} подходов</small></div></div>
       <div className="progress-line"><span style={{width:`${allSets.length?(doneSets/allSets.length)*100:0}%`}}/></div>
       {rest>0&&<div className="rest"><span>Отдых</span><strong>{fmt(rest)}</strong><button onClick={()=>setRest(0)}>Пропустить</button></div>}
-      <div className="exercise-list">{exercises.map(ex=><article className="exercise" key={ex.id}><div className="exercise-title"><div><span>{ex.muscle}</span><h2>{ex.name}</h2></div><select aria-label={`Отдых ${ex.name}`} value={ex.restSeconds} onChange={e=>setExercises(items=>items.map(x=>x.id===ex.id?{...x,restSeconds:Number(e.target.value)}:x))}><option value="60">60 с</option><option value="90">90 с</option><option value="120">2 мин</option><option value="180">3 мин</option></select></div>
+      <div className="exercise-list">{exercises.map((ex,exIndex)=><article className="exercise" key={ex.id}><div className="exercise-title"><div><span>{ex.muscle}</span><h2>{ex.name}</h2></div><select aria-label={`Отдых ${ex.name}`} value={ex.restSeconds} onChange={e=>setExercises(items=>items.map(x=>x.id===ex.id?{...x,restSeconds:Number(e.target.value)}:x))}><option value="60">60 с</option><option value="90">90 с</option><option value="120">2 мин</option><option value="180">3 мин</option></select></div>
         {previousByName(ex.name)&&<div className="previous">Прошлый раз: {previousByName(ex.name)?.sets.map(s=>`${s.weight}×${s.reps}`).join(" · ")}</div>}
+        {recommendation(ex.name)&&<div className="recommendation"><span>Рекомендация сегодня</span><strong>{recommendation(ex.name)}</strong><button onClick={()=>fillPrevious(ex.id,ex.name)}>Заполнить как раньше</button></div>}
+        <div className="exercise-tools"><button disabled={exIndex===0} onClick={()=>moveExercise(exIndex,-1)}>↑</button><button disabled={exIndex===exercises.length-1} onClick={()=>moveExercise(exIndex,1)}>↓</button><button onClick={()=>removeExercise(ex.id)}>Удалить упражнение</button></div>
         <div className="set-head"><span>ПОДХОД</span><span>КГ</span><span>ПОВТ.</span><span/></div>
-        {ex.sets.map((s,i)=><div className={`set-row ${s.done?"complete":""}`} key={s.id}><b>{i+1}</b><input aria-label={`Вес ${ex.name} ${i+1}`} type="number" value={s.weight} onChange={e=>updateSet(ex.id,s.id,"weight",Number(e.target.value))}/><input aria-label={`Повторения ${ex.name} ${i+1}`} type="number" value={s.reps} onChange={e=>updateSet(ex.id,s.id,"reps",Number(e.target.value))}/><button aria-label={`Завершить ${ex.name} ${i+1}`} className="check" onClick={()=>toggleSet(ex.id,s.id)}><Icon name="check"/></button></div>)}
+        {ex.sets.map((s,i)=><div className={`set-row ${s.done?"complete":""}`} key={s.id}><button className="set-number" aria-label={`Удалить подход ${i+1}`} onClick={()=>removeSet(ex.id,s.id)}>{i+1}<small>×</small></button><input aria-label={`Вес ${ex.name} ${i+1}`} type="number" value={s.weight} onChange={e=>updateSet(ex.id,s.id,"weight",Number(e.target.value))}/><input aria-label={`Повторения ${ex.name} ${i+1}`} type="number" value={s.reps} onChange={e=>updateSet(ex.id,s.id,"reps",Number(e.target.value))}/><button aria-label={`${s.done?"Отменить":"Завершить"} ${ex.name} ${i+1}`} className="check" onClick={()=>toggleSet(ex.id,s.id)}><Icon name="check"/></button></div>)}
         <button className="add-set" onClick={()=>setExercises(items=>items.map(x=>x.id===ex.id?{...x,sets:[...x.sets,{...x.sets[x.sets.length-1],id:Date.now(),done:false}]}:x))}>+ Добавить подход</button>
       </article>)}</div>
       <button className="add-exercise" onClick={()=>setCatalogOpen(true)}><Icon name="plus"/> Каталог упражнений</button><button className="finish" disabled={!doneSets} onClick={finishWorkout}>Завершить тренировку</button>
     </section>}
 
     {tab==="progress"&&<section className="screen"><div className="eyebrow">АНАЛИТИКА</div><h1>Твой <em>прогресс.</em></h1>
-      <div className="big-stat"><span>Общий объём</span><strong>{(monthVolume/1000).toFixed(1)} т</strong><small>{state.history.length} тренировок записано</small></div>
+      <div className="big-stat"><span>Объём за всё время</span><strong>{(allTimeVolume/1000).toFixed(1)} т</strong><small>Этот месяц: {(monthVolume/1000).toFixed(1)} т · {monthSessions.length} тренировок</small></div>
       <article className="chart-card"><div className="section-title"><h3>Объём тренировок</h3><span>последние {chart.length}</span></div><div className="bars">{chart.map((v,i)=><div key={i}><span style={{height:`${Math.max(15,(v/Math.max(...chart,1))*100)}%`}}/><small>Т{i+1}</small></div>)}</div></article>
-      <div className="records"><div className="section-title"><h3>Личные рекорды</h3><span>расчётный 1ПМ</span></div>{records.length?records.map(([n,r])=><div key={n}><span>{n}<small>Лучший вес {r.weight} кг</small></span><strong>{r.oneRm} кг</strong></div>):<p className="empty">Завершите тренировку, чтобы увидеть рекорды.</p>}</div>
+      <div className="records"><div className="section-title"><h3>Личные рекорды</h3><span>{records.length} всего · расчётный 1ПМ</span></div>{records.length?records.slice(0,6).map(([n,r])=><div key={n}><span>{n}<small>Лучший вес {r.weight} кг</small></span><strong>{r.oneRm} кг</strong></div>):<p className="empty">Завершите тренировку, чтобы увидеть рекорды.</p>}</div>
       <div className="section-title"><h3>Замеры тела</h3><button onClick={()=>setMeasurementOpen(true)}>+ Добавить</button></div>
       <div className="measurements">{state.measurements.length?state.measurements.slice(0,6).map(m=><article key={m.id}>{m.photo&&<img src={m.photo} alt={`Прогресс ${m.iso}`}/>}<div><strong>{m.weight||"—"} кг</strong><span>{formatDate(m.iso)}</span><small>Талия {m.waist||"—"} · Грудь {m.chest||"—"} · Рука {m.arm||"—"}</small></div></article>):<button className="empty-card" onClick={()=>setMeasurementOpen(true)}>Добавьте первый замер и фото прогресса</button>}</div>
     </section>}
@@ -491,7 +542,7 @@ export default function Home() {
       <article className="calendar"><div className="section-title"><h3>{new Intl.DateTimeFormat("ru",{month:"long",year:"numeric"}).format(new Date())}</h3><span>{trainedDays.size} дней</span></div><div className="weekdays">{["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(x=><b key={x}>{x}</b>)}</div><div className="calendar-grid">{calendarDays.map((d,i)=><span key={i} className={d&&trainedDays.has(d)?"trained":""}>{d||""}</span>)}</div></article>
       <div className="report-actions"><select aria-label="Период отчёта" value={reportPeriod} onChange={e=>setReportPeriod(e.target.value as "week"|"month")}><option value="week">7 дней</option><option value="month">30 дней</option></select><button onClick={exportCsv}>CSV</button><button onClick={()=>window.print()}>PDF / печать</button></div>
       <div className="print-summary"><h2>Отчёт IronTrack</h2><p>{reportPeriod==="week"?"Последние 7 дней":"Последние 30 дней"} · {reportSessions.length} тренировок · {(reportSessions.reduce((s,x)=>s+x.volume,0)/1000).toFixed(1)} т</p></div>
-      <div className="history-list">{state.history.map(s=><article key={s.id}><div className="date-box"><b>{s.date.split(" ")[0]}</b><span>{s.date.split(" ")[1]}</span></div><div><h3>{s.title}</h3><p>{s.duration} мин · {(s.volume/1000).toFixed(1)} т объёма</p>{s.exercises&&<small>{s.exercises.map(e=>e.name).join(" · ")}</small>}</div><span>→</span></article>)}</div>
+      <div className="history-list">{state.history.map(s=><article key={s.id}><button className="date-box" onClick={()=>editSessionDate(s)} aria-label={`Изменить дату ${s.title}`}><b>{s.date.split(" ")[0]}</b><span>{s.date.split(" ")[1]}</span></button><div><h3>{s.title}</h3><p>{s.duration} мин · {(s.volume/1000).toFixed(1)} т объёма</p>{s.exercises&&<small>{s.exercises.map(e=>e.name).join(" · ")}</small>}</div><button className="history-delete" onClick={()=>deleteSession(s.id)} aria-label={`Удалить ${s.title}`}>×</button></article>)}</div>
     </section>}
 
     <nav>{([["home","home","Главная"],["workout","dumbbell","Тренировка"],["progress","chart","Прогресс"],["history","history","История"]] as const).map(([id,icon,label])=><button key={id} className={tab===id?"active":""} onClick={()=>setTab(id)}><Icon name={icon}/><span>{label}</span></button>)}</nav>
