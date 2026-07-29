@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
-initOpenNextCloudflareForDev();
-
 const isGitHubPages = process.env.GITHUB_PAGES === "true";
 const pagesBasePath = isGitHubPages ? "/irontrack-gym" : "";
+
+if (!isGitHubPages) initOpenNextCloudflareForDev();
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
