@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 type SetRow = { id: number; weight: number; reps: number; done: boolean };
 type Exercise = { id: number; name: string; muscle: string; sets: SetRow[] };
 type Session = { date: string; title: string; volume: number; duration: number };
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const cloudSyncEnabled = process.env.NEXT_PUBLIC_CLOUD_SYNC !== "false";
 
 const starter: Exercise[] = [
   { id: 1, name: "Жим штанги лёжа", muscle: "Грудь", sets: [
@@ -82,6 +84,7 @@ export default function Home() {
       }
       if (!value) value = await readIndexedBackup();
       try {
+        if (!cloudSyncEnabled) throw new Error("static mode");
         const response = await fetch("/api/state", { cache: "no-store" });
         if (response.ok) {
           const cloud = await response.json();
@@ -96,7 +99,7 @@ export default function Home() {
         setExercises(value.exercises || starter);
         setHistory(value.history || seedHistory);
       }
-      if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+      if ("serviceWorker" in navigator) navigator.serviceWorker.register(`${basePath}/sw.js`).catch(() => {});
       if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
       setLoaded(true);
     })();
@@ -110,6 +113,7 @@ export default function Home() {
       writeIndexedBackup(value);
       const id = window.setTimeout(async () => {
         try {
+          if (!cloudSyncEnabled) throw new Error("static mode");
           const response = await fetch("/api/state", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -120,7 +124,7 @@ export default function Home() {
           setSaveStatus("Синхронизировано с облаком");
         } catch {
           setCloudOnline(false);
-          setSaveStatus("Офлайн — сохранено на устройстве");
+          setSaveStatus(cloudSyncEnabled ? "Офлайн — сохранено на устройстве" : "Сохранено на устройстве");
         }
       }, 700);
       return () => window.clearTimeout(id);
@@ -209,10 +213,10 @@ export default function Home() {
           <button className="modal-close" onClick={() => setSettings(false)} aria-label="Закрыть">×</button>
           <div className="eyebrow">ДАННЫЕ И ПРИЛОЖЕНИЕ</div>
           <h2>Всё под контролем.</h2>
-          <div className={`save-state ${cloudOnline ? "cloud" : "offline"}`}><i/><div><strong>{saveStatus}</strong><span>{cloudOnline ? "Серверная и локальная копии защищены" : "Синхронизируется при подключении"}</span></div></div>
+          <div className={`save-state ${cloudOnline || !cloudSyncEnabled ? "cloud" : "offline"}`}><i/><div><strong>{saveStatus}</strong><span>{cloudOnline ? "Серверная и локальная копии защищены" : cloudSyncEnabled ? "Синхронизируется при подключении" : "Локальная база и офлайн-режим активны"}</span></div></div>
           <button className="data-button" onClick={exportData}><span>↓</span><div><strong>Скачать копию</strong><small>Все тренировки в одном файле</small></div></button>
           <label className="data-button"><span>↑</span><div><strong>Восстановить данные</strong><small>Загрузить ранее сохранённую копию</small></div><input type="file" accept="application/json,.json" onChange={e => importData(e.target.files?.[0])}/></label>
-          <p className="privacy-note">Данные сохраняются в защищённом облаке сайта и дублируются на устройстве для работы без интернета.</p>
+          <p className="privacy-note">{cloudSyncEnabled ? "Данные сохраняются в защищённом облаке сайта и дублируются на устройстве для работы без интернета." : "Данные сохраняются только на этом устройстве. Периодически скачивайте резервную копию для защиты от очистки браузера."}</p>
         </section>
       </div>}
 
