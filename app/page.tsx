@@ -45,7 +45,8 @@ export default function Home() {
   const [rest, setRest] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [settings, setSettings] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("Сохранено на устройстве");
+  const [saveStatus, setSaveStatus] = useState("Подключаю облако…");
+  const [cloudOnline, setCloudOnline] = useState(false);
 
   async function readIndexedBackup() {
     return new Promise<{ exercises: Exercise[]; history: Session[] } | null>((resolve) => {
@@ -80,6 +81,17 @@ export default function Home() {
         try { value = JSON.parse(saved); } catch {}
       }
       if (!value) value = await readIndexedBackup();
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" });
+        if (response.ok) {
+          const cloud = await response.json();
+          if (cloud.state?.exercises && cloud.state?.history) value = cloud.state;
+          setCloudOnline(true);
+          setSaveStatus(cloud.state ? "Синхронизировано с облаком" : "Облако подключено");
+        }
+      } catch {
+        setSaveStatus("Офлайн — данные на устройстве");
+      }
       if (value) {
         setExercises(value.exercises || starter);
         setHistory(value.history || seedHistory);
@@ -96,7 +108,21 @@ export default function Home() {
       setSaveStatus("Сохраняю…");
       localStorage.setItem("irontrack-state", JSON.stringify(value));
       writeIndexedBackup(value);
-      const id = window.setTimeout(() => setSaveStatus("Сохранено на устройстве"), 350);
+      const id = window.setTimeout(async () => {
+        try {
+          const response = await fetch("/api/state", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(value),
+          });
+          if (!response.ok) throw new Error();
+          setCloudOnline(true);
+          setSaveStatus("Синхронизировано с облаком");
+        } catch {
+          setCloudOnline(false);
+          setSaveStatus("Офлайн — сохранено на устройстве");
+        }
+      }, 700);
       return () => window.clearTimeout(id);
     }
   }, [exercises, history, loaded]);
@@ -183,10 +209,10 @@ export default function Home() {
           <button className="modal-close" onClick={() => setSettings(false)} aria-label="Закрыть">×</button>
           <div className="eyebrow">ДАННЫЕ И ПРИЛОЖЕНИЕ</div>
           <h2>Всё под контролем.</h2>
-          <div className="save-state"><i/><div><strong>{saveStatus}</strong><span>Работает и без интернета</span></div></div>
+          <div className={`save-state ${cloudOnline ? "cloud" : "offline"}`}><i/><div><strong>{saveStatus}</strong><span>{cloudOnline ? "Серверная и локальная копии защищены" : "Синхронизируется при подключении"}</span></div></div>
           <button className="data-button" onClick={exportData}><span>↓</span><div><strong>Скачать копию</strong><small>Все тренировки в одном файле</small></div></button>
           <label className="data-button"><span>↑</span><div><strong>Восстановить данные</strong><small>Загрузить ранее сохранённую копию</small></div><input type="file" accept="application/json,.json" onChange={e => importData(e.target.files?.[0])}/></label>
-          <p className="privacy-note">Данные хранятся только на этом устройстве и не передаются третьим лицам. Для переноса используйте резервную копию.</p>
+          <p className="privacy-note">Данные сохраняются в защищённом облаке сайта и дублируются на устройстве для работы без интернета.</p>
         </section>
       </div>}
 

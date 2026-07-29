@@ -106,7 +106,8 @@ nav button.active svg { stroke-width:2.3; }
 .settings-modal h2 { font-size:28px; margin:0 0 22px; letter-spacing:-1px; }
 .modal-close { position:absolute; top:18px; right:18px; border:0; background:#ddd; width:32px; height:32px; border-radius:50%; font-size:21px; line-height:25px; }
 .save-state { display:flex; align-items:center; gap:12px; border:1px solid var(--line); background:white; border-radius:14px; padding:14px; margin-bottom:14px; }
-.save-state i { width:11px; height:11px; border-radius:50%; background:#8cc900; box-shadow:0 0 0 5px #dfff9a; }
+.save-state i { width:11px; height:11px; border-radius:50%; background:#e2a400; box-shadow:0 0 0 5px #ffe7a1; }
+.save-state.cloud i { background:#8cc900; box-shadow:0 0 0 5px #dfff9a; }
 .save-state strong, .save-state span { display:block; }
 .save-state strong { font-size:13px; }
 .save-state span { color:var(--muted); font-size:10px; margin-top:2px; }
