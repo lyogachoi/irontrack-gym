@@ -215,8 +215,16 @@ export default function Home() {
   const [muscleFilter, setMuscleFilter] = useState("Все");
   const [reportPeriod, setReportPeriod] = useState<"week"|"month">("month");
   const [measureForm, setMeasureForm] = useState({ weight:"", waist:"", chest:"", arm:"", photo:"" });
+  const [localToday, setLocalToday] = useState("");
 
   const activeTemplate = state.templates.find(t => t.id === state.activeTemplateId) || state.templates[0];
+
+  useEffect(() => {
+    const updateLocalDate = () => setLocalToday(localIso());
+    updateLocalDate();
+    const timer = window.setInterval(updateLocalDate, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -265,7 +273,7 @@ export default function Home() {
         }
       } catch {}
       if (!restored) setExercises(cloneExercises(template.exercises));
-      if ("serviceWorker" in navigator) navigator.serviceWorker.register(`${basePath}/sw.js`).catch(() => {});
+      if ("serviceWorker" in navigator) navigator.serviceWorker.register(`${basePath}/sw.js`,{updateViaCache:"none"}).then(registration=>registration.update()).catch(() => {});
       if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
       setLoaded(true); setSaveStatus("Сохранено на устройстве");
     })();
@@ -498,7 +506,7 @@ export default function Home() {
     </section></div>}
 
     {tab==="home"&&<section className="screen home-screen">
-      <div className="eyebrow">СЕГОДНЯ · {formatDate(todayIso()).toUpperCase()}</div>
+      <div className="eyebrow">СЕГОДНЯ{localToday&&<> · {formatDate(localToday).toUpperCase()}</>}</div>
       <article className="week-widget">
         <div className="week-ring" style={{"--week-progress":`${Math.min(100,weekStats.count/3*100)}%`} as React.CSSProperties}><strong>{weekStats.count}</strong><span>/ 3</span></div>
         <div className="week-copy"><small>ЦЕЛЬ НА НЕДЕЛЮ</small><h2>{weekStats.trainedToday?"Тренировка записана":"Ваш темп"}</h2><p>{weekStats.count>=3?"Цель выполнена — отличная неделя.":`Осталось ${3-weekStats.count} ${3-weekStats.count===1?"тренировка":"тренировки"} до цели.`}</p></div>

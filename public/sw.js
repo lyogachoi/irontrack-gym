@@ -1,4 +1,4 @@
-const CACHE = "irontrack-v2";
+const CACHE = "irontrack-v3";
 const ROOT = self.registration.scope;
 const CORE = ["", "manifest.webmanifest", "icon.svg", "icon-192.svg", "icon-512.svg"].map(path => new URL(path, ROOT).toString());
 
@@ -12,6 +12,18 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request, { cache: "no-store" })
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE).then(cache => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(() => caches.match(event.request).then(cached => cached || caches.match(ROOT)))
+    );
+    return;
+  }
   event.respondWith(
     fetch(event.request)
       .then(response => {
