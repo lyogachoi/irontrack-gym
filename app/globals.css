@@ -298,7 +298,9 @@ h1 { font-size:45px; line-height:.96; letter-spacing:-2.6px; }
 .recommendation button { border:0; background:none; color:#566139; padding:0; text-align:left; font-size:8px; text-decoration:underline; }
 .exercise-tools { display:flex; gap:5px; margin:0 0 11px; }
 .exercise-tools button { border:0; background:#eceee6; border-radius:8px; padding:7px 10px; color:#6f7369; font-size:8px; }
-.exercise-tools button:last-child { margin-left:auto; color:#9a554e; background:#fff0ed; }
+.exercise-tools .remove-exercise { margin-left:auto; display:flex; align-items:center; gap:6px; color:#a04e47; background:linear-gradient(180deg,#fff7f5,#ffebe7); border:1px solid #f3d4cf; border-radius:10px; padding:7px 10px 7px 8px; font-weight:700; box-shadow:0 3px 10px #b7645812; transition:transform .15s ease,background .15s ease; }
+.exercise-tools .remove-exercise svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.exercise-tools .remove-exercise:active { transform:scale(.96); background:#ffe2dc; }
 .exercise-tools button:disabled { opacity:.3; }
 .set-head,.set-row { grid-template-columns:44px 1fr 1fr 42px; gap:7px; }
 .set-row { padding:5px; }
