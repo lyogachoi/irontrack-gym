@@ -15,7 +15,7 @@ type SavedState = { templates: Template[]; activeTemplateId: number; history: Se
 type ActiveWorkout = { templateId: number; exercises: Exercise[]; seconds: number; rest: number };
 type CatalogExercise = {
   name: string; muscle: string; equipment: string; level: "Начальный" | "Средний";
-  sheet: "chest" | "back" | "legs" | "arms" | "core"; slot: number;
+  sheet: "chest" | "back" | "legs" | "arms" | "core" | "chest-extra" | "back-extra" | "legs-extra" | "arms-extra" | "core-extra"; slot: number;
   steps: [string, string, string]; mistakes: string;
 };
 
@@ -25,8 +25,10 @@ const localIso = (date = new Date()) => `${date.getFullYear()}-${String(date.get
 const todayIso = () => localIso();
 const formatDate = (iso: string) => new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" }).format(new Date(`${iso}T12:00:00`)).replace(".", "");
 const defaultProgression: Progression = { minReps: 8, maxReps: 12, targetSets: 3, weightStep: 2.5 };
+const canonicalExerciseName = (name: string) => name === "Сгибание ног" ? "Сгибание ног лёжа" : name;
 const normalizeExercise = (e: Exercise) => ({
   ...e,
+  name: canonicalExerciseName(e.name),
   progression: e.progression || { ...defaultProgression },
   sets: e.sets.map(s => ({ ...s, rir: s.rir ?? 2, kind: s.kind || "Рабочий" as SetKind })),
 });
@@ -47,7 +49,7 @@ const popularExercise = (
   "Вернитесь в исходное положение медленно, сохраняя контроль и ровное дыхание.",
 ], mistakes, level);
 
-const catalog: CatalogExercise[] = [
+const catalogBase: CatalogExercise[] = [
   exercise("Жим штанги лёжа","Грудь","Штанга · скамья","chest",0,["Сведите лопатки, упритесь стопами и снимите штангу.","Опустите гриф к нижней части груди, локти держите под углом около 45°.","Выжмите вверх без отрыва таза и потери положения лопаток."],"Не отбивайте штангу от груди и не разводите локти в одну линию с плечами.","Средний"),
   exercise("Жим гантелей на наклонной","Грудь","Гантели · наклонная скамья","chest",1,["Установите наклон 20–35°, прижмите лопатки к скамье.","Опустите гантели по сторонам груди до комфортной глубины.","Выжмите их вверх и слегка внутрь, сохраняя запястья ровными."],"Слишком высокий наклон переносит нагрузку на плечи."),
   exercise("Сведение рук в кроссовере","Грудь","Кроссовер","chest",2,["Поставьте одну ногу вперёд, корпус слегка наклоните.","С мягкими локтями сведите рукояти перед грудью.","Медленно вернитесь до растяжения грудных мышц."],"Не превращайте движение в жим и не раскачивайте корпус."),
@@ -140,6 +142,38 @@ const catalog: CatalogExercise[] = [
   popularExercise("Ролик для пресса","Кор","Ролик","core",0,"Встаньте на колени, возьмите ролик и подкрутите таз.","Прокатите ролик вперёд до контролируемой глубины и вернитесь прессом.","Не проваливайте поясницу и не начинайте с полной амплитуды.","Средний"),
 ];
 
+const exactImages: Record<string, [CatalogExercise["sheet"], number]> = {
+  "Жим в тренажёре сидя":["chest-extra",0], "Жим штанги на наклонной скамье":["chest-extra",1],
+  "Жим штанги на наклонной вниз":["chest-extra",2], "Жим гантелей на наклонной вниз":["chest-extra",3],
+  "Жим в Смите лёжа":["chest-extra",4], "Пуловер с гантелью":["chest-extra",5],
+  "Сведение рук в тренажёре":["chest-extra",6], "Отжимания с колен":["chest-extra",7],
+  "Классическая становая тяга":["back-extra",0], "Тяга Т-грифа":["back-extra",1],
+  "Тяга с упором грудью":["back-extra",2], "Тяга Хаммер":["back-extra",3],
+  "Тяга верхнего блока нейтральным хватом":["back-extra",4], "Тяга верхнего блока обратным хватом":["back-extra",5],
+  "Австралийские подтягивания":["back-extra",6], "Шраги с гантелями":["back-extra",7],
+  "Фронтальные приседания":["legs-extra",0], "Гоблет-присед":["legs-extra",1],
+  "Гакк-присед":["legs-extra",2], "Приседания в Смите":["legs-extra",3],
+  "Болгарские выпады":["legs-extra",4], "Зашагивания на тумбу":["legs-extra",5],
+  "Становая тяга сумо":["legs-extra",6], "Наклоны со штангой good morning":["legs-extra",7],
+  "Отведение ног в тренажёре":["legs-extra",8], "Приведение ног в тренажёре":["legs-extra",9],
+  "Отведение ноги назад в кроссовере":["legs-extra",10], "Ягодичный мост на полу":["legs-extra",11],
+  "Жим штанги стоя":["legs-extra",12], "Жим Арнольда":["legs-extra",13],
+  "Тяга штанги к подбородку":["arms-extra",0], "Подъём гантелей перед собой":["arms-extra",1],
+  "Махи в стороны на блоке":["arms-extra",2], "Тяга каната к лицу":["arms-extra",3],
+  "Разводка гантелей в наклоне":["arms-extra",4], "Сгибание рук на скамье Скотта":["arms-extra",5],
+  "Сгибание гантелей на наклонной":["arms-extra",6], "Сгибание рук на нижнем блоке":["arms-extra",7],
+  "Концентрированное сгибание":["arms-extra",8], "Жим лёжа узким хватом":["arms-extra",9],
+  "Французский жим лёжа":["arms-extra",10], "Разгибание гантели из-за головы":["arms-extra",11],
+  "Разгибание рук с канатом":["arms-extra",12], "Обратные отжимания от скамьи":["core-extra",0],
+  "Скручивания на полу":["core-extra",1], "Велосипед":["core-extra",2],
+  "Русские повороты":["core-extra",3], "Мёртвый жук":["core-extra",4],
+  "Боковая планка":["core-extra",5], "Ролик для пресса":["core-extra",6],
+};
+const catalog: CatalogExercise[] = catalogBase.map(item => {
+  const image = exactImages[item.name];
+  return image ? {...item, sheet:image[0], slot:image[1]} : item;
+});
+
 const defaultTemplates: Template[] = [
   { id: 1, name: "Верх тела", subtitle: "Грудь · Спина · Плечи", exercises: [
     { id: 1, name: "Жим штанги лёжа", muscle: "Грудь", restSeconds: 120, sets: setRows([[60,10],[65,8],[65,8]]) },
@@ -149,7 +183,7 @@ const defaultTemplates: Template[] = [
   { id: 2, name: "Ноги", subtitle: "Квадрицепс · Бицепс бедра · Ягодицы", exercises: [
     { id: 4, name: "Приседания со штангой", muscle: "Ноги", restSeconds: 180, sets: setRows([[70,10],[80,8],[80,8]]) },
     { id: 5, name: "Жим ногами", muscle: "Ноги", restSeconds: 120, sets: setRows([[120,12],[130,10],[130,10]]) },
-    { id: 6, name: "Сгибание ног", muscle: "Ноги", restSeconds: 75, sets: setRows([[35,12],[40,10],[40,10]]) },
+    { id: 6, name: "Сгибание ног лёжа", muscle: "Задняя поверхность бедра", restSeconds: 75, sets: setRows([[35,12],[40,10],[40,10]]) },
   ]},
   { id: 3, name: "Руки и плечи", subtitle: "Плечи · Бицепс · Трицепс", exercises: [
     { id: 7, name: "Махи гантелей в стороны", muscle: "Плечи", restSeconds: 60, sets: setRows([[8,15],[8,15],[8,12]]) },
@@ -184,15 +218,19 @@ const Icon = ({ name }: { name: string }) => {
 };
 
 const ExerciseImage = ({ item, large = false }: { item: CatalogExercise; large?: boolean }) => {
-  const col = item.slot % 3;
-  const row = Math.floor(item.slot / 3);
+  const extra = item.sheet.endsWith("-extra");
+  const columns = extra ? 4 : 3;
+  const rows = item.sheet === "legs-extra" || item.sheet === "arms-extra" ? 4 : 2;
+  const col = item.slot % columns;
+  const row = Math.floor(item.slot / columns);
   return <div
     className={`exercise-image ${large ? "large" : ""}`}
     role="img"
     aria-label={`Техника: ${item.name}`}
     style={{
       backgroundImage: `url("${basePath}/exercises/${item.sheet}.jpg")`,
-      backgroundPosition: `${col * 50}% ${row * 100}%`,
+      backgroundSize: `${columns * 100}% ${rows * 100}%`,
+      backgroundPosition: `${col/(columns-1)*100}% ${row/(rows-1)*100}%`,
     }}
   />;
 };
@@ -261,7 +299,7 @@ export default function Home() {
           const fallback = new Date();
           fallback.setDate(fallback.getDate() - index * 3);
           const iso = session.iso || fallback.toISOString().slice(0, 10);
-          return { ...session, id: session.id || Date.now() + index, iso, date: session.date || formatDate(iso) };
+          return { ...session, id: session.id || Date.now() + index, iso, date: session.date || formatDate(iso), exercises:session.exercises?.map(item=>({...item,name:canonicalExerciseName(item.name)})) };
         });
         value = {
           ...value,
