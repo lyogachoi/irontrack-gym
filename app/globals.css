@@ -325,13 +325,14 @@ h1 { font-size:45px; line-height:.96; letter-spacing:-2.6px; }
 .previous-cell strong { font-size:13px; }
 .previous-cell span { color:#8b9184; font-size:9px; }
 .previous-cell.empty { background:#f5f6f1; }
-.set-number { position:relative; border:0; background:none; color:#777; font-size:12px; font-weight:800; }
-.set-number small { position:absolute; top:-2px; right:2px; color:#c48b84; font-size:8px; }
+.set-number { display:grid; place-items:center; color:#777; font-size:12px; font-weight:800; }
 .check { width:40px; height:40px; border-radius:12px; }
-.set-meta { display:grid; grid-template-columns:1fr 1fr; gap:7px; padding:7px 0 2px 104px; }
+.set-meta { display:grid; grid-template-columns:1fr 1fr 38px; gap:7px; padding:7px 0 2px 104px; }
 .set-meta label { min-width:0; }
 .set-meta label>span { margin:0 0 4px 2px; }
 .set-meta .field-select { height:38px; background-position:calc(100% - 14px) 16px,calc(100% - 10px) 16px; }
+.remove-set { align-self:end; width:38px; height:38px; display:grid; place-items:center; border:1px solid #f0d1cb; border-radius:10px; background:#fff3f0; color:#a5574d; }
+.remove-set svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .add-set { padding:12px 0 2px; }
 .add-exercise { min-height:52px; background:#fff; border:1px solid var(--line); box-shadow:0 7px 22px #2221; }
 .finish { min-height:56px; border-radius:17px; box-shadow:0 14px 30px #14161125; }

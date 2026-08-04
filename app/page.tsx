@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type SetKind = "Разминка" | "Рабочий" | "Дроп-сет" | "До отказа" | "Восстановительный";
 type Progression = { minReps: number; maxReps: number; targetSets: number; weightStep: number };
-type SetRow = { id: number; weight: number; reps: number; done: boolean; rir: number; kind: SetKind };
+type SetRow = { id: number; weight: number | ""; reps: number | ""; done: boolean; rir: number; kind: SetKind };
 type Exercise = { id: number; name: string; muscle: string; restSeconds: number; sets: SetRow[]; progression?: Progression };
 type CompletedSet = { weight: number; reps: number; rir?: number; kind?: SetKind };
 type CompletedExercise = { name: string; muscle: string; sets: CompletedSet[] };
@@ -338,7 +338,7 @@ export default function Home() {
 
   const allSets = exercises.flatMap(e => e.sets);
   const doneSets = allSets.filter(s => s.done).length;
-  const liveVolume = allSets.filter(s => s.done).reduce((n,s) => n + s.weight*s.reps, 0);
+  const liveVolume = allSets.filter(s => s.done).reduce((n,s) => n + Number(s.weight)*Number(s.reps), 0);
   const fmt = (v:number) => `${String(Math.floor(v/60)).padStart(2,"0")}:${String(v%60).padStart(2,"0")}`;
   const currentMonth = todayIso().slice(0,7);
   const monthSessions = state.history.filter(h=>h.iso.slice(0,7)===currentMonth);
@@ -402,6 +402,7 @@ export default function Home() {
   function toggleSet(exerciseId:number,setId:number) {
     const ex=exercises.find(e=>e.id===exerciseId);
     const row=ex?.sets.find(s=>s.id===setId);
+    if(!row?.done&&(row?.weight===""||row?.reps==="")){alert("Введите вес и повторения перед завершением подхода.");return;}
     setExercises(items=>items.map(e=>e.id===exerciseId?{...e,sets:e.sets.map(s=>s.id===setId?{...s,done:!s.done}:s)}:e));
     if (!row?.done) setRest(ex?.restSeconds || 90);
   }
@@ -455,7 +456,7 @@ export default function Home() {
   }
   function finishWorkout() {
     if(!doneSets)return;
-    const completed:CompletedExercise[]=exercises.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets.filter(s=>s.done).map(s=>({weight:s.weight,reps:s.reps,rir:s.rir,kind:s.kind}))})).filter(e=>e.sets.length);
+    const completed:CompletedExercise[]=exercises.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets.filter(s=>s.done).map(s=>({weight:Number(s.weight),reps:Number(s.reps),rir:s.rir,kind:s.kind}))})).filter(e=>e.sets.length);
     const session:Session={id:Date.now(),iso:todayIso(),date:formatDate(todayIso()),title:activeTemplate.name,volume:liveVolume,duration:Math.max(1,Math.round(seconds/60)),exercises:completed};
     setState(s=>({...s,history:[session,...s.history]})); setExercises(cloneExercises(activeTemplate.exercises));
     setStarted(false);setSeconds(0);setRest(0);setTab("home");
@@ -577,8 +578,8 @@ export default function Home() {
         <div className="exercise-tools"><button disabled={exIndex===0} onClick={()=>moveExercise(exIndex,-1)}>↑</button><button disabled={exIndex===exercises.length-1} onClick={()=>moveExercise(exIndex,1)}>↓</button><button className="remove-exercise" onClick={()=>removeExercise(ex.id)} aria-label={`Удалить упражнение ${ex.name}`}><Icon name="trash"/><span>Удалить</span></button></div>
         <div className="set-head"><span>№</span><span>ПРОШЛЫЙ</span><span>СЕГОДНЯ КГ</span><span>ПОВТ.</span><span/></div>
         {ex.sets.map((s,i)=>{const previousSet=previousByName(ex.name)?.sets[i];return <div className={`set-block ${s.done?"complete":""}`} key={s.id}>
-          <div className="set-row"><button className="set-number" aria-label={`Удалить подход ${i+1}`} onClick={()=>removeSet(ex.id,s.id)}>{i+1}<small>×</small></button><div className={`previous-cell ${previousSet?"":"empty"}`}>{previousSet?<><strong>{previousSet.weight}</strong><span>× {previousSet.reps}</span></>:<span>—</span>}</div><input aria-label={`Вес ${ex.name} ${i+1}`} type="number" value={s.weight} onChange={e=>updateSet(ex.id,s.id,"weight",Number(e.target.value))}/><input aria-label={`Повторения ${ex.name} ${i+1}`} type="number" value={s.reps} onChange={e=>updateSet(ex.id,s.id,"reps",Number(e.target.value))}/><button aria-label={`${s.done?"Отменить":"Завершить"} ${ex.name} ${i+1}`} className="check" onClick={()=>toggleSet(ex.id,s.id)}><Icon name="check"/></button></div>
-          <div className="set-meta"><label><span>Тип подхода</span><select className="field-select" value={s.kind} onChange={e=>updateSet(ex.id,s.id,"kind",e.target.value)}>{(["Разминка","Рабочий","Дроп-сет","До отказа","Восстановительный"] as SetKind[]).map(kind=><option key={kind}>{kind}</option>)}</select></label><label><span>Запас · RIR</span><select className="field-select" value={s.rir} onChange={e=>updateSet(ex.id,s.id,"rir",Number(e.target.value))}>{[0,1,2,3,4,5].map(rir=><option key={rir} value={rir}>{rir===0?"0 · отказ":`${rir} повт.`}</option>)}</select></label></div>
+          <div className="set-row"><span className="set-number">{i+1}</span><div className={`previous-cell ${previousSet?"":"empty"}`}>{previousSet?<><strong>{previousSet.weight}</strong><span>× {previousSet.reps}</span></>:<span>—</span>}</div><input aria-label={`Вес ${ex.name} ${i+1}`} inputMode="decimal" type="number" value={s.weight} onChange={e=>updateSet(ex.id,s.id,"weight",e.target.value===""?"":Number(e.target.value))}/><input aria-label={`Повторения ${ex.name} ${i+1}`} inputMode="numeric" type="number" value={s.reps} onChange={e=>updateSet(ex.id,s.id,"reps",e.target.value===""?"":Number(e.target.value))}/><button aria-label={`${s.done?"Отменить":"Завершить"} ${ex.name} ${i+1}`} className="check" onClick={()=>toggleSet(ex.id,s.id)}><Icon name="check"/></button></div>
+          <div className="set-meta"><label><span>Тип подхода</span><select className="field-select" value={s.kind} onChange={e=>updateSet(ex.id,s.id,"kind",e.target.value)}>{(["Разминка","Рабочий","Дроп-сет","До отказа","Восстановительный"] as SetKind[]).map(kind=><option key={kind}>{kind}</option>)}</select></label><label><span>Запас · RIR</span><select className="field-select" value={s.rir} onChange={e=>updateSet(ex.id,s.id,"rir",Number(e.target.value))}>{[0,1,2,3,4,5].map(rir=><option key={rir} value={rir}>{rir===0?"0 · отказ":`${rir} повт.`}</option>)}</select></label><button className="remove-set" onClick={()=>removeSet(ex.id,s.id)} aria-label={`Удалить подход ${i+1}`}><Icon name="trash"/></button></div>
         </div>})}
         <button className="add-set" onClick={()=>setExercises(items=>items.map(x=>x.id===ex.id?{...x,sets:[...x.sets,{...x.sets[x.sets.length-1],id:Date.now(),done:false}]}:x))}>+ Добавить подход</button>
       </article>)}</div>
